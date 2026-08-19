@@ -1,0 +1,21 @@
+{
+  "name": "Mochi Life Pro AI",
+  "short_name": "Mochi Life",
+  "description": "Học từ vựng tiếng Anh theo ngữ cảnh",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fcfcfc",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3553/3553460.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3553/3553460.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
