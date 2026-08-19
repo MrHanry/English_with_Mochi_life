@@ -1,5 +1,23 @@
 <!DOCTYPE html>
 <html lang="vi" class="light">
+<!--
+  ====================================================================
+  HƯỚNG DẪN QUAN TRỌNG ĐỂ CHẠY THÔNG BÁO TRÊN ĐIỆN THOẠI (GITHUB PAGES)
+  ====================================================================
+  Do giới hạn bảo mật của trình duyệt (Chrome/Safari trên mobile), 
+  bạn BẮT BUỘC phải tạo thêm một file có tên là `sw.js` trên Github của bạn.
+  
+  CÁCH LÀM:
+  1. Tạo 1 file mới trên Github (cùng thư mục với file index.html này).
+  2. Đặt tên file là: sw.js
+  3. Dán đúng 4 dòng code sau vào file sw.js và lưu lại:
+  
+  self.addEventListener('install', (event) => self.skipWaiting());
+  self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+  
+  Khi web của bạn load, nó sẽ tự động tìm file sw.js này để gửi thông báo chuẩn Mobile!
+  ====================================================================
+-->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -72,6 +90,17 @@
     }
 
     .modal-overlay { background-color: rgba(0,0,0,0.55); backdrop-filter: blur(5px); }
+
+    @keyframes ring {
+      0% { transform: rotate(0); }
+      10% { transform: rotate(15deg); }
+      20% { transform: rotate(-10deg); }
+      30% { transform: rotate(5deg); }
+      40% { transform: rotate(-5deg); }
+      50% { transform: rotate(0); }
+      100% { transform: rotate(0); }
+    }
+    .animate-ring { animation: ring 2s ease-in-out infinite; }
   </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
@@ -285,7 +314,7 @@
       </div>
     </div>
 
-    <!-- MODAL 2: THÊM / SỬA TỪ VỰNG (BỔ SUNG PHIÊN ÂM IPA & AI AUTO-FILL) -->
+    <!-- MODAL 2: THÊM / SỬA TỪ VỰNG -->
     <div id="modal-add-word" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center modal-overlay hidden opacity-0 transition-opacity duration-300">
       <div class="bg-white dark:bg-gray-800 w-full sm:max-w-sm sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl transform translate-y-full sm:translate-y-0 transition-transform duration-300 max-h-[90vh] overflow-y-auto" id="modal-add-content">
         <div class="flex justify-between items-center mb-4">
@@ -335,7 +364,7 @@
       </div>
     </div>
 
-    <!-- MODAL 3: BẢNG HIỂN THỊ CHI TIẾT TỪ VỰNG (NEW DETAIL MODAL) -->
+    <!-- MODAL 3: BẢNG HIỂN THỊ CHI TIẾT TỪ VỰNG -->
     <div id="modal-word-detail" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay hidden opacity-0 transition-opacity duration-300 p-4">
       <div class="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl transition-all transform scale-95 relative border border-amber-100 dark:border-gray-700" id="modal-detail-content">
         
@@ -432,8 +461,8 @@
     let sessionStats = { total: 0, correct: 0, typo: 0, levelUps: 0, totalTime: 0 };
     let currentDetailWordId = null;
 
-    // --- CẤU HÌNH THÔNG BÁO (NOTIFICATIONS) ---
     let notificationEnabled = localStorage.getItem('mochilife_notify') === 'true';
+    let swRegistration = null; // Quản lý Service Worker cho Mobile
 
     // --- DỮ LIỆU BAN ĐẦU CÓ PHIÊN ÂM IPA VÀ CÂU VÍ DỤ ---
     const initialData = [
@@ -449,7 +478,6 @@
       { id: 10, en: "Optimism", ipa: "/ˈɒptɪmɪzəm/", vi: "Sự lạc quan", exampleEn: "His optimism inspires everyone around him.", exampleVi: "Sự lạc quan của anh ấy truyền cảm hứng cho mọi người.", level: 5, nextReview: Date.now() - 10000 }
     ];
 
-    // --- LƯU TRỮ VÀ KHỞI TẠO DỮ LIỆU ---
     function loadData() {
       const stored = localStorage.getItem('mochilife_db');
       if (stored) {
@@ -509,7 +537,17 @@
       if (downgraded > 0) saveData();
     }
 
-    // --- HỆ THỐNG THÔNG BÁO NHẮC NHỞ (LOCAL NOTIFICATION) ---
+    async function initServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        try {
+          swRegistration = await navigator.serviceWorker.register('./sw.js');
+          console.log('✅ Service Worker Mochi đã sẵn sàng!');
+        } catch (error) {
+          console.log('⚠️ Không tìm thấy file sw.js hoặc trình duyệt không hỗ trợ SW.', error);
+        }
+      }
+    }
+
     function initNotificationSystem() {
       updateNotificationUI();
       // Chạy vòng lặp kiểm tra mỗi phút nếu đã bật thông báo
@@ -518,7 +556,7 @@
       setTimeout(checkAndNotify, 3000);
     }
 
-    function toggleNotifications() {
+    async function toggleNotifications() {
       if (!('Notification' in window)) {
         showToast('Trình duyệt của bạn không hỗ trợ thông báo!', true);
         return;
@@ -528,20 +566,32 @@
         notificationEnabled = !notificationEnabled;
         localStorage.setItem('mochilife_notify', notificationEnabled);
         updateNotificationUI();
-        showToast(notificationEnabled ? 'Đã bật thông báo nhắc nhở!' : 'Đã tắt thông báo!');
-        if (notificationEnabled) checkAndNotify();
+        
+        if (notificationEnabled) {
+          showToast('Đã bật thông báo nhắc nhở!');
+          sendMobileNotification("Mochi Life AI 🔔", {
+            body: "Thông báo đã sẵn sàng trên điện thoại của bạn!",
+            vibrate: [200, 100, 200]
+          });
+          checkAndNotify();
+        } else {
+          showToast('Đã tắt thông báo!');
+        }
       } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            notificationEnabled = true;
-            localStorage.setItem('mochilife_notify', true);
-            updateNotificationUI();
-            showToast('Đã bật thông báo nhắc nhở thành công!');
-            checkAndNotify();
-          } else {
-            showToast('Bạn đã từ chối cấp quyền thông báo', true);
-          }
-        });
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          notificationEnabled = true;
+          localStorage.setItem('mochilife_notify', true);
+          updateNotificationUI();
+          showToast('Đã bật thông báo nhắc nhở thành công!');
+          sendMobileNotification("Mochi Life AI 🔔", {
+            body: "Thông báo ôn tập đã sẵn sàng!",
+            vibrate: [200, 100, 200]
+          });
+          checkAndNotify();
+        } else {
+          showToast('Bạn đã từ chối cấp quyền thông báo', true);
+        }
       } else {
         showToast('Quyền thông báo đã bị chặn trong cài đặt trình duyệt', true);
       }
@@ -558,6 +608,31 @@
       }
     }
 
+    async function sendMobileNotification(title, options = {}) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+      const defaultOptions = {
+        icon: 'https://cdn-icons-png.flaticon.com/512/3553/3553460.png',
+        badge: 'https://cdn-icons-png.flaticon.com/512/3553/3553460.png',
+        tag: 'mochi-study-reminder',
+        vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: true,
+        ...options
+      };
+
+      try {
+        // Ưu tiên Service Worker trên Mobile
+        if (swRegistration && swRegistration.showNotification) {
+          await swRegistration.showNotification(title, defaultOptions);
+        } else {
+          new Notification(title, defaultOptions);
+        }
+      } catch(e) {
+        console.error("Lỗi khi bắn thông báo mobile:", e);
+        try { new Notification(title, defaultOptions); } catch(err) {}
+      }
+    }
+
     function checkAndNotify() {
       if (!notificationEnabled || Notification.permission !== 'granted') return;
 
@@ -570,23 +645,10 @@
         const notifyCooldown = 4 * 60 * 60 * 1000; 
         
         if (now - lastNotify > notifyCooldown) {
-          try {
-            const notification = new Notification("Mochi Life AI - Đến giờ ôn tập!", {
-              body: `Bạn có ${dueWords.length} từ vựng đã đến "Thời Điểm Vàng". Hãy ôn tập ngay để khắc sâu trí nhớ nhé!`,
-              icon: 'https://cdn-icons-png.flaticon.com/512/3553/3553460.png', // Icon mầm cây
-              badge: 'https://cdn-icons-png.flaticon.com/512/3553/3553460.png',
-              tag: 'mochi-study-reminder'
-            });
-            
-            notification.onclick = function() {
-              window.focus();
-              notification.close();
-            };
-            
-            localStorage.setItem('mochilife_last_notify', now.toString());
-          } catch(e) {
-            console.error("Lỗi khi hiển thị thông báo:", e);
-          }
+          sendMobileNotification("Mochi Life AI - Đến giờ ôn tập! ⚡", {
+            body: `Bạn có ${dueWords.length} từ vựng đã đến "Thời Điểm Vàng". Hãy vào học ngay nhé!`
+          });
+          localStorage.setItem('mochilife_last_notify', now.toString());
         }
       }
     }
@@ -718,7 +780,7 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       return example.replace(regex, (match) => `<span class="text-brand dark:text-amber-400 font-bold underline decoration-brand underline-offset-4">${match}</span>`);
     }
 
-    // --- POPUP CHI TIẾT TỪ VỰNG (NEW FEATURE) ---
+    // --- POPUP CHI TIẾT TỪ VỰNG ---
     function openWordDetailModal(wordId) {
       const wordObj = db.find(w => w.id === wordId);
       if (!wordObj) return;
@@ -884,7 +946,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
     }
 
     function deleteWord(wordId) {
-      // Để tuân thủ quy tắc không dùng confirm(), tiến hành xóa và báo toast
       db = db.filter(w => w.id !== wordId);
       saveData();
       closeWordDetailModal();
@@ -915,7 +976,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         const li = document.createElement('li');
         li.className = "p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl hover:bg-amber-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between cursor-pointer border border-transparent hover:border-amber-200 dark:hover:border-gray-600";
         
-        // Nhấp vào dòng từ vựng mở Bảng Chi Tiết
         li.onclick = () => openWordDetailModal(w.id);
 
         li.innerHTML = `
@@ -949,9 +1009,8 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         return;
       }
 
-      // Trộn danh sách ngẫu nhiên
       dueWords.sort(() => Math.random() - 0.5);
-      learningQueue = dueWords.slice(0, 10); // Mỗi hiệp tối đa 10 từ
+      learningQueue = dueWords.slice(0, 10);
       
       currentQIndex = 0;
       sessionStats = { total: learningQueue.length, correct: 0, typo: 0, levelUps: 0, totalTime: 0 };
@@ -969,16 +1028,13 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       isAnswering = false;
       const wordObj = learningQueue[currentQIndex];
 
-      // Cập nhật Progress Bar
       const progress = (currentQIndex / sessionStats.total) * 100;
       document.getElementById('learning-progress').style.width = `${progress}%`;
       document.getElementById('learning-counter').innerText = `${currentQIndex + 1}/${sessionStats.total}`;
 
-      // Reset Feedback UI
       const feedbackIcon = document.getElementById('feedback-icon');
       feedbackIcon.className = "absolute top-6 text-6xl opacity-0 transition-opacity duration-200 z-10";
 
-      // Cập nhật Badge Cấp độ
       const lvlInfo = LEVEL_INFO[wordObj.level];
       const lvlBadge = document.getElementById('card-level');
       lvlBadge.innerText = `Cấp độ ${wordObj.level}: ${lvlInfo.name}`;
@@ -1002,9 +1058,7 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         exampleBox.classList.add('hidden');
       }
 
-      // XỬ LÝ DẠNG BÀI TẬP CÂU HỎI THEO 5 CẤP ĐỘ
       if (wordObj.level === 1) {
-        // CẤP 1: Tiếng Anh -> Chọn Tiếng Việt (Xem câu ví dụ tô đậm)
         cardWord.innerText = wordObj.en;
         cardWord.className = "text-4xl sm:text-5xl font-extrabold text-gray-800 dark:text-white mb-2";
         cardHint.innerText = "Chọn nghĩa tiếng Việt phù hợp với ngữ cảnh câu ví dụ";
@@ -1017,7 +1071,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         playAudio(wordObj.en);
 
       } else if (wordObj.level === 2) {
-        // CẤP 2: Tiếng Việt -> Chọn Tiếng Anh (Ngữ cảnh ví dụ bị đục lỗ)
         cardWord.innerText = wordObj.vi;
         cardWord.className = "text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mb-2";
         cardHint.innerText = "Chọn từ tiếng Anh chính xác điền vào chỗ trống";
@@ -1029,7 +1082,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         generateMultipleChoice(wordObj, 'en');
 
       } else if (wordObj.level === 3) {
-        // CẤP 3: Luyện nghe âm thanh -> Chọn Tiếng Việt
         cardWord.innerText = "🎧 Nghe & Chọn";
         cardWord.className = "text-3xl font-extrabold text-blue-500 mb-2";
         cardHint.innerText = "Lắng nghe từ vựng và chọn nghĩa đúng theo ngữ cảnh";
@@ -1044,7 +1096,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         setTimeout(() => playAudio(wordObj.en), 300);
 
       } else if (wordObj.level === 4) {
-        // CẤP 4: Điền từ vào chỗ trống trong câu (Có gợi ý ký tự đầu)
         cardWord.innerText = wordObj.vi;
         cardWord.className = "text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mb-2";
         const hintChar = wordObj.en.charAt(0);
@@ -1057,7 +1108,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         generateTypingInput(wordObj.en, true);
 
       } else {
-        // CẤP 5: Tự điền từ còn thiếu vào câu (Không có gợi ý)
         cardWord.innerText = wordObj.vi;
         cardWord.className = "text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mb-2";
         cardHint.innerText = "Tự nhớ và gõ từ tiếng Anh còn thiếu trong ngữ cảnh";
@@ -1092,7 +1142,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       });
     }
 
-    // --- TẠO Ô NHẬP LIỆU GÕ TỪ ---
     function generateTypingInput(correctText, withHint) {
       const container = document.getElementById('answer-area');
       const placeholder = withHint ? `${correctText.charAt(0)}... (${correctText.length} kí tự)` : "Gõ đáp án tiếng Anh...";
@@ -1132,7 +1181,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         feedbackIcon.innerHTML = '<i class="fa-solid fa-face-smile-beam text-green-500 drop-shadow-lg"></i>';
         playAudio(wordObj.en);
 
-        // Nâng cấp độ nếu đúng nhanh (< 5s)
         if (reactionTime < 5.0 && db[dbIndex].level < 5) {
           db[dbIndex].level++;
           sessionStats.levelUps++;
@@ -1152,7 +1200,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         }
       }
 
-      // Đặt lịch ôn tập tiếp theo
       const newLevel = db[dbIndex].level;
       db[dbIndex].nextReview = Date.now() + INTERVALS[newLevel];
 
@@ -1218,7 +1265,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       }
     }
 
-    // --- TÍNH LỖI CHÍNH TẢ (LEVENSHTEIN) ---
     function levenshteinDistance(a, b) {
       const matrix = [];
       for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -1239,7 +1285,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       return matrix[b.length][a.length];
     }
 
-    // --- KẾT THÚC VÀ TRANG CHỦ ---
     function finishLearning() {
       document.getElementById('view-learning').classList.add('hidden');
       document.getElementById('view-learning').classList.remove('flex');
@@ -1320,7 +1365,6 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       }
     }
 
-    // --- TOAST NOTIFICATION ---
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       const toastMsg = document.getElementById('toast-msg');
@@ -1342,13 +1386,14 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       }, 3000);
     }
 
-    // --- KHỞI CHẠY ỨNG DỤNG ---
-    window.onload = function() {
+    // --- KHỞI TẠO ỨNG DỤNG ---
+    window.addEventListener('DOMContentLoaded', async () => {
       applySavedTheme();
       loadData();
-      initDashboard();
+      await initServiceWorker(); // Tải Service Worker cho mobile
       initNotificationSystem();
-    };
+      initDashboard();
+    });
   </script>
 </body>
 </html>
