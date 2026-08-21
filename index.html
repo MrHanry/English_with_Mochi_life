@@ -127,60 +127,38 @@
           </h1>
           <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Học ngữ cảnh, nhớ lâu gấp 5 lần</p>
         </div>
-        <div class="flex gap-3">
+        <div class="flex gap-2">
           
-          <!-- Button Thông báo (Giữ lại nút Thông báo ở ngoài vì có Badge nhắc nhở) -->
-          <button onclick="toggleNotifications()" id="btn-notify" title="Nhắc nhở học tập" class="w-10 h-10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-gray-200 dark:border-gray-700 relative">
-            <i class="fa-regular fa-bell"></i>
-          </button>
-          
-          <!-- Dropdown Settings Tích Hợp -->
+          <!-- THÊM MỚI: Button Nhập/Xuất Dữ liệu -->
           <div class="relative">
-            <button onclick="toggleSettingsMenu(event)" title="Cài đặt" class="w-10 h-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-gray-200 dark:border-gray-700 focus:outline-none">
-              <i class="fa-solid fa-gear"></i>
+            <button onclick="toggleDataMenu(event)" title="Nhập/Xuất Dữ liệu" class="w-10 h-10 bg-green-50 dark:bg-gray-800 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-green-200 dark:border-gray-700">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
             </button>
-            
-            <!-- Menu Dropdown -->
-            <div id="settings-menu" class="absolute right-0 top-12 w-56 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 hidden z-50 overflow-hidden py-2 transform origin-top-right transition-all">
-                
-                <div class="px-4 py-2 mb-1">
-                    <p class="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Hệ thống</p>
-                </div>
-                
-                <!-- Toggle Giao diện Sáng/Tối -->
-                <button onclick="toggleDarkMode()" class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
-                    <div class="flex items-center gap-3">
-                        <div class="w-6 flex justify-center"><i id="theme-icon" class="fa-solid fa-moon text-gray-500 dark:text-amber-400"></i></div>
-                        <span id="theme-text">Giao diện Tối</span>
-                    </div>
-                </button>
-                
-                <!-- Cài đặt AI Key -->
-                <button onclick="openAISettingsModal(); toggleSettingsMenu(event);" class="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
-                    <div class="w-6 flex justify-center"><i class="fa-solid fa-robot text-brand"></i></div>
-                    Cài đặt API AI
-                </button>
-
-                <div class="h-px bg-gray-100 dark:bg-gray-700 my-2 mx-4"></div>
-                <div class="px-4 py-2 mb-1">
-                    <p class="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Dữ liệu</p>
-                </div>
-
-                <!-- Nhập Dữ Liệu -->
-                <label for="import-file" class="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-left transition-colors">
-                    <div class="w-6 flex justify-center"><i class="fa-solid fa-file-import text-blue-500"></i></div>
-                    Nhập JSON
+            <!-- Dropdown Menu -->
+            <div id="data-menu" class="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 hidden z-50 overflow-hidden">
+                <label for="import-file" class="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700">
+                    <i class="fa-solid fa-file-import text-brand"></i> Nhập JSON
                 </label>
                 <input type="file" id="import-file" class="hidden" accept=".json" onchange="importData(event)">
-                
-                <!-- Xuất Dữ Liệu -->
-                <button onclick="exportData()" class="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors">
-                    <div class="w-6 flex justify-center"><i class="fa-solid fa-file-export text-green-500"></i></div>
-                    Xuất Backup JSON
+                <button onclick="exportData()" class="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-left">
+                    <i class="fa-solid fa-file-export text-green-500"></i> Xuất JSON
                 </button>
             </div>
           </div>
 
+          <!-- Button Thông báo -->
+          <button onclick="toggleNotifications()" id="btn-notify" title="Nhắc nhở học tập" class="w-10 h-10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-gray-200 dark:border-gray-700 relative">
+            <i class="fa-regular fa-bell"></i>
+          </button>
+          <!-- Button Cài đặt API Key -->
+          <button onclick="openAISettingsModal()" title="Cài đặt AI Key" class="w-10 h-10 bg-amber-50 dark:bg-gray-800 text-brand dark:text-amber-400 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-amber-200 dark:border-gray-700">
+            <i class="fa-solid fa-key"></i>
+          </button>
+          <!-- Button Dark Mode -->
+          <button onclick="toggleDarkMode()" class="w-10 h-10 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-amber-400 rounded-full flex items-center justify-center text-lg shadow-sm transition-colors">
+            <i class="fa-solid fa-moon dark:hidden"></i>
+            <i class="fa-solid fa-sun hidden dark:block"></i>
+          </button>
         </div>
       </header>
 
@@ -495,11 +473,11 @@
     };
 
     const LEVEL_INFO = {
-      1: { name: 'Mới học', color: 'text-red-500', bg: 'bg-red-500', icon: 'fa-seedling' },
-      2: { name: 'Mang máng', color: 'text-orange-500', bg: 'bg-orange-500', icon: 'fa-leaf' },
-      3: { name: 'Tạm nhớ', color: 'text-yellow-500', bg: 'bg-yellow-500', icon: 'fa-clover' },
-      4: { name: 'Ghi nhớ', color: 'text-green-500', bg: 'bg-green-500', icon: 'fa-tree' },
-      5: { name: 'Khắc sâu', color: 'text-sky-500', bg: 'bg-sky-500', icon: 'fa-mountain-sun' }
+      1: { name: 'Cấp 1: Mới học', color: 'text-red-500', bg: 'bg-red-500', icon: 'fa-seedling' },
+      2: { name: 'Cấp 2: Mang máng', color: 'text-orange-500', bg: 'bg-orange-500', icon: 'fa-leaf' },
+      3: { name: 'Cấp 3:Tạm nhớ', color: 'text-yellow-500', bg: 'bg-yellow-500', icon: 'fa-clover' },
+      4: { name: 'Cấp 4: Ghi nhớ', color: 'text-green-500', bg: 'bg-green-500', icon: 'fa-tree' },
+      5: { name: 'Cấp 5: Khắc sâu', color: 'text-sky-500', bg: 'bg-sky-500', icon: 'fa-mountain-sun' }
     };
 
     let db = [];
@@ -548,35 +526,21 @@
 
     function toggleDarkMode() {
       const html = document.documentElement;
-      const icon = document.getElementById('theme-icon');
-      const text = document.getElementById('theme-text');
-
       if (html.classList.contains('dark')) {
         html.classList.remove('dark');
         localStorage.setItem('mochilife_theme', 'light');
-        if(icon) icon.className = 'fa-solid fa-moon text-gray-500';
-        if(text) text.innerText = 'Giao diện Tối';
       } else {
         html.classList.add('dark');
         localStorage.setItem('mochilife_theme', 'dark');
-        if(icon) icon.className = 'fa-solid fa-sun text-amber-400';
-        if(text) text.innerText = 'Giao diện Sáng';
       }
     }
 
     function applySavedTheme() {
       const theme = localStorage.getItem('mochilife_theme');
-      const icon = document.getElementById('theme-icon');
-      const text = document.getElementById('theme-text');
-
       if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
-        if(icon) icon.className = 'fa-solid fa-sun text-amber-400';
-        if(text) text.innerText = 'Giao diện Sáng';
       } else {
         document.documentElement.classList.remove('dark');
-        if(icon) icon.className = 'fa-solid fa-moon text-gray-500';
-        if(text) text.innerText = 'Giao diện Tối';
       }
     }
 
@@ -1309,22 +1273,21 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         renderDictionary();
     }
 
-    // --- TÍNH NĂNG SETTINGS DROPDOWN ---
-    function toggleSettingsMenu(event) {
+    // --- TÍNH NĂNG NHẬP / XUẤT DỮ LIỆU ---
+    function toggleDataMenu(event) {
         event.stopPropagation();
-        const menu = document.getElementById('settings-menu');
+        const menu = document.getElementById('data-menu');
         menu.classList.toggle('hidden');
     }
 
-    // Ẩn menu cài đặt khi người dùng bấm chuột hoặc touch ra ngoài khu vực menu
+    // Ẩn menu khi ấn ra ngoài
     document.addEventListener('click', function(event) {
-        const menu = document.getElementById('settings-menu');
+        const menu = document.getElementById('data-menu');
         if (menu && !menu.classList.contains('hidden')) {
             menu.classList.add('hidden');
         }
     });
 
-    // --- TÍNH NĂNG NHẬP / XUẤT DỮ LIỆU ---
     function exportData() {
         if (db.length === 0) {
             showToast("Không có dữ liệu để xuất!", true);
