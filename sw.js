@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mochi-life-v1';
+const CACHE_NAME = 'mochi-life-v2'; // Tăng phiên bản lên v2
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -17,7 +17,19 @@ self.addEventListener('install', (event) => {
 
 // Kích hoạt và dọn dẹp cache cũ
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key); // Tự động xóa sạch các bản cache cũ
+          }
+        })
+      );
+    }).then(() => {
+      return self.clients.claim();
+    })
+  );
 });
 
 // Chạy Offline bằng dữ liệu đã lưu trong Cache
