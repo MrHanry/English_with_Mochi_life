@@ -128,6 +128,24 @@
           <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Học ngữ cảnh, nhớ lâu gấp 5 lần</p>
         </div>
         <div class="flex gap-2">
+          
+          <!-- THÊM MỚI: Button Nhập/Xuất Dữ liệu -->
+          <div class="relative">
+            <button onclick="toggleDataMenu(event)" title="Nhập/Xuất Dữ liệu" class="w-10 h-10 bg-green-50 dark:bg-gray-800 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-green-200 dark:border-gray-700">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+            </button>
+            <!-- Dropdown Menu -->
+            <div id="data-menu" class="absolute right-0 top-12 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 hidden z-50 overflow-hidden">
+                <label for="import-file" class="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700">
+                    <i class="fa-solid fa-file-import text-brand"></i> Nhập JSON
+                </label>
+                <input type="file" id="import-file" class="hidden" accept=".json" onchange="importData(event)">
+                <button onclick="exportData()" class="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 text-left">
+                    <i class="fa-solid fa-file-export text-green-500"></i> Xuất JSON
+                </button>
+            </div>
+          </div>
+
           <!-- Button Thông báo -->
           <button onclick="toggleNotifications()" id="btn-notify" title="Nhắc nhở học tập" class="w-10 h-10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-105 transition-transform border border-gray-200 dark:border-gray-700 relative">
             <i class="fa-regular fa-bell"></i>
@@ -755,7 +773,17 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
           })
         });
 
-        if (!response.ok) throw new Error('API Key không hợp lệ hoặc hết hạn');
+        if (!response.ok) {
+          // Bắt chi tiết lỗi từ API của Google trả về
+          let errorDetail = `Lỗi mạng (HTTP ${response.status})`;
+          try {
+            const errorData = await response.json();
+            errorDetail = errorData.error?.message || response.statusText;
+          } catch(e) {
+             errorDetail = response.statusText;
+          }
+          throw new Error(errorDetail);
+        }
 
         const result = await response.json();
         const jsonText = result.candidates[0].content.parts[0].text;
@@ -768,8 +796,15 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
 
         showToast('Đã tự động tạo IPA & Ví dụ bằng AI!');
       } catch (err) {
+        // In log cực kỳ chi tiết ra Console (nhấn F12 để xem)
+        console.error("========== CHI TIẾT LỖI AI ==========");
         console.error(err);
-        showToast('Lỗi AI: Vui lòng kiểm tra lại Key!', true);
+        console.error("=====================================");
+        
+        // Hiện thông báo lỗi lên màn hình (cắt ngắn nếu quá dài để không bị tràn)
+        let displayError = err.message || 'Lỗi không xác định';
+        if(displayError.length > 60) displayError = displayError.substring(0, 60) + '... (Xem F12)';
+        showToast(`Lỗi AI: ${displayError}`, true);
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> AI Tự Điền';
@@ -1018,305 +1053,143 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
         return;
       }
 
-      dueWords.sort(() => Math.random() - 0.5);
-      learningQueue = dueWords.slice(0, 10);
-      
+      // Trộn mảng câu hỏi
+      learningQueue = dueWords.sort(() => Math.random() - 0.5);
       currentQIndex = 0;
       sessionStats = { total: learningQueue.length, correct: 0, typo: 0, levelUps: 0, totalTime: 0 };
-
+      
+      // Chuyển view
       document.getElementById('view-dashboard').classList.add('hidden');
-      const viewLearn = document.getElementById('view-learning');
-      viewLearn.classList.remove('hidden');
-      viewLearn.classList.add('flex');
-
-      loadQuestion();
+      document.getElementById('view-learning').classList.remove('hidden');
+      document.getElementById('view-learning').classList.add('flex');
+      
+      renderQuestion();
     }
 
-    // --- HIỂN THỊ CÂU HỎI THEO CẤP ĐỘ ---
-    function loadQuestion() {
+    function renderQuestion() {
       isAnswering = false;
       const wordObj = learningQueue[currentQIndex];
-
-      const progress = (currentQIndex / sessionStats.total) * 100;
-      document.getElementById('learning-progress').style.width = `${progress}%`;
-      document.getElementById('learning-counter').innerText = `${currentQIndex + 1}/${sessionStats.total}`;
-
-      const feedbackIcon = document.getElementById('feedback-icon');
-      feedbackIcon.className = "absolute top-6 text-6xl opacity-0 transition-opacity duration-200 z-10";
-
-      const lvlInfo = LEVEL_INFO[wordObj.level];
-      const lvlBadge = document.getElementById('card-level');
-      lvlBadge.innerText = `Cấp độ ${wordObj.level}: ${lvlInfo.name}`;
-      lvlBadge.className = `inline-block px-3 py-1 text-xs font-bold mb-3 uppercase tracking-wider rounded-lg ${lvlInfo.color.replace('text', 'bg')} bg-opacity-20 dark:bg-opacity-30 ${lvlInfo.color}`;
-
-      const cardWord = document.getElementById('card-word');
-      const cardHint = document.getElementById('question-hint');
-      const btnAudio = document.getElementById('btn-play-audio');
-      const answerArea = document.getElementById('answer-area');
       
-      const exampleBox = document.getElementById('card-example-box');
-      const exampleEnEl = document.getElementById('card-example-en');
-      const exampleViEl = document.getElementById('card-example-vi');
-
-      btnAudio.classList.add('hidden');
-      answerArea.innerHTML = '';
-
+      // Cập nhật Header
+      document.getElementById('learning-progress').style.width = `${(currentQIndex / learningQueue.length) * 100}%`;
+      document.getElementById('learning-counter').innerText = `${currentQIndex + 1}/${learningQueue.length}`;
+      
+      // Cập nhật Câu Hỏi
+      document.getElementById('card-level').innerText = `Cấp độ ${wordObj.level}`;
+      document.getElementById('question-hint').innerText = 'Chọn nghĩa tiếng Việt của từ này';
+      document.getElementById('card-word').innerText = wordObj.en;
+      
+      // Hiển thị câu ví dụ
       if (wordObj.exampleEn) {
-        exampleBox.classList.remove('hidden');
+        document.getElementById('card-example-box').classList.remove('hidden');
+        document.getElementById('card-example-en').innerHTML = getMaskedExample(wordObj.en, wordObj.exampleEn);
+        document.getElementById('card-example-vi').innerText = wordObj.exampleVi || '';
       } else {
-        exampleBox.classList.add('hidden');
+        document.getElementById('card-example-box').classList.add('hidden');
       }
 
-      if (wordObj.level === 1) {
-        cardWord.innerText = wordObj.en;
-        cardWord.className = "text-4xl sm:text-5xl font-extrabold text-gray-800 dark:text-white mb-2";
-        cardHint.innerText = "Chọn nghĩa tiếng Việt phù hợp với ngữ cảnh câu ví dụ";
+      // Audio
+      const btnAudio = document.getElementById('btn-play-audio');
+      btnAudio.classList.remove('hidden');
+      btnAudio.onclick = () => playAudio(wordObj.en);
 
-        if (wordObj.exampleEn) {
-          exampleEnEl.innerHTML = `"${getHighlightedExample(wordObj.en, wordObj.exampleEn)}"`;
-          exampleViEl.innerText = wordObj.exampleVi ? `Dịch: ${wordObj.exampleVi}` : '';
-        }
-        generateMultipleChoice(wordObj, 'vi');
-        playAudio(wordObj.en);
-
-      } else if (wordObj.level === 2) {
-        cardWord.innerText = wordObj.vi;
-        cardWord.className = "text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mb-2";
-        cardHint.innerText = "Chọn từ tiếng Anh chính xác điền vào chỗ trống";
-
-        if (wordObj.exampleEn) {
-          exampleEnEl.innerHTML = `"${getMaskedExample(wordObj.en, wordObj.exampleEn)}"`;
-          exampleViEl.innerText = wordObj.exampleVi ? `Dịch: ${wordObj.exampleVi}` : '';
-        }
-        generateMultipleChoice(wordObj, 'en');
-
-      } else if (wordObj.level === 3) {
-        cardWord.innerText = "🎧 Nghe & Chọn";
-        cardWord.className = "text-3xl font-extrabold text-blue-500 mb-2";
-        cardHint.innerText = "Lắng nghe từ vựng và chọn nghĩa đúng theo ngữ cảnh";
-        btnAudio.classList.remove('hidden');
-        btnAudio.onclick = () => playAudio(wordObj.en);
-
-        if (wordObj.exampleEn) {
-          exampleEnEl.innerHTML = `"${getMaskedExample(wordObj.en, wordObj.exampleEn)}"`;
-          exampleViEl.innerText = wordObj.exampleVi ? `Dịch: ${wordObj.exampleVi}` : '';
-        }
-        generateMultipleChoice(wordObj, 'vi');
-        setTimeout(() => playAudio(wordObj.en), 300);
-
-      } else if (wordObj.level === 4) {
-        cardWord.innerText = wordObj.vi;
-        cardWord.className = "text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mb-2";
-        const hintChar = wordObj.en.charAt(0);
-        cardHint.innerText = `Gõ từ hoàn thành câu (Gợi ý bắt đầu bằng "${hintChar}", ${wordObj.en.length} ký tự)`;
-
-        if (wordObj.exampleEn) {
-          exampleEnEl.innerHTML = `"${getMaskedExample(wordObj.en, wordObj.exampleEn)}"`;
-          exampleViEl.innerText = wordObj.exampleVi ? `Dịch: ${wordObj.exampleVi}` : '';
-        }
-        generateTypingInput(wordObj.en, true);
-
-      } else {
-        cardWord.innerText = wordObj.vi;
-        cardWord.className = "text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mb-2";
-        cardHint.innerText = "Tự nhớ và gõ từ tiếng Anh còn thiếu trong ngữ cảnh";
-
-        if (wordObj.exampleEn) {
-          exampleEnEl.innerHTML = `"${getMaskedExample(wordObj.en, wordObj.exampleEn)}"`;
-          exampleViEl.innerText = wordObj.exampleVi ? `Dịch: ${wordObj.exampleVi}` : '';
-        }
-        generateTypingInput(wordObj.en, false);
-      }
+      // Trộn đáp án Trắc nghiệm
+      const answerArea = document.getElementById('answer-area');
+      answerArea.innerHTML = '';
+      
+      let options = [wordObj.vi];
+      // Chọn ngẫu nhiên 3 đáp án sai
+      let others = db.filter(w => w.id !== wordObj.id).map(w => w.vi);
+      others.sort(() => Math.random() - 0.5);
+      options = options.concat(others.slice(0, 3));
+      
+      // Trộn đều 4 đáp án
+      options.sort(() => Math.random() - 0.5);
+      
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full p-4 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-2xl text-left font-semibold text-gray-700 dark:text-gray-200 hover:border-brand dark:hover:border-brand transition-all active:scale-95';
+        btn.innerText = opt;
+        btn.onclick = () => checkAnswer(opt, wordObj.vi, btn, wordObj);
+        answerArea.appendChild(btn);
+      });
 
       qStartTime = Date.now();
     }
 
-    // --- TẠO NÚT TRẮC NGHIỆM ---
-    function generateMultipleChoice(correctWordObj, targetLang) {
-      let options = [correctWordObj];
-      let wrongPool = db.filter(w => w.id !== correctWordObj.id);
-      wrongPool.sort(() => Math.random() - 0.5);
-      options = options.concat(wrongPool.slice(0, 3));
-      options.sort(() => Math.random() - 0.5);
-
-      const container = document.getElementById('answer-area');
-      options.forEach((opt, index) => {
-        const btn = document.createElement('button');
-        const textToShow = targetLang === 'vi' ? opt.vi : opt.en;
-        
-        btn.className = "w-full text-left p-4 rounded-2xl border-2 border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand hover:bg-brand-light/30 dark:hover:border-brand-dark transition-all focus:outline-none font-semibold text-gray-700 dark:text-gray-200 shadow-sm";
-        btn.innerHTML = `<span class="inline-block w-6 text-gray-400 font-normal mr-2">${index+1}.</span> ${textToShow}`;
-        btn.onclick = () => handleChoiceAnswer(opt.id, correctWordObj.id, btn);
-        container.appendChild(btn);
-      });
-    }
-
-    function generateTypingInput(correctText, withHint) {
-      const container = document.getElementById('answer-area');
-      const placeholder = withHint ? `${correctText.charAt(0)}... (${correctText.length} kí tự)` : "Gõ đáp án tiếng Anh...";
-      
-      const input = document.createElement('input');
-      input.type = "text";
-      input.id = "typing-input";
-      input.placeholder = placeholder;
-      input.className = "w-full bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-2xl px-5 py-4 text-center text-xl font-bold text-gray-800 dark:text-white focus:outline-none focus:border-brand dark:focus:border-brand transition-all mb-3 shadow-inner";
-      input.autocomplete = "off";
-      
-      const btnSubmit = document.createElement('button');
-      btnSubmit.innerText = "KIỂM TRA";
-      btnSubmit.className = "w-full bg-brand text-white font-bold py-4 rounded-2xl shadow-md active:scale-95 transition-transform";
-      
-      btnSubmit.onclick = () => handleTypingAnswer(input.value.trim(), correctText, input);
-      input.onkeypress = (e) => { if(e.key === 'Enter') btnSubmit.onclick(); }
-      
-      container.appendChild(input);
-      container.appendChild(btnSubmit);
-
-      setTimeout(() => input.focus(), 100);
-    }
-
-    // --- XỬ LÝ TRẢ LỜI ---
-    function processAnswer(isCorrect, isTypo, reactionTime) {
+    function checkAnswer(selected, correct, btnEl, wordObj) {
       if (isAnswering) return;
       isAnswering = true;
-
-      sessionStats.totalTime += reactionTime;
-      const wordObj = learningQueue[currentQIndex];
-      const dbIndex = db.findIndex(w => w.id === wordObj.id);
-      const feedbackIcon = document.getElementById('feedback-icon');
-
-      if (isCorrect && !isTypo) {
-        sessionStats.correct++;
-        feedbackIcon.innerHTML = '<i class="fa-solid fa-face-smile-beam text-green-500 drop-shadow-lg"></i>';
-        playAudio(wordObj.en);
-
-        if (reactionTime < 5.0 && db[dbIndex].level < 5) {
-          db[dbIndex].level++;
-          sessionStats.levelUps++;
-        }
-      } else if (isCorrect && isTypo) {
-        sessionStats.typo++;
-        sessionStats.correct++;
-        feedbackIcon.innerHTML = '<i class="fa-solid fa-face-flushed text-amber-500 drop-shadow-lg"></i>';
-        showToast("Sai chính tả 1 chút, bạn nhớ gõ cẩn thận nhé!");
-        playAudio(wordObj.en);
-      } else {
-        document.getElementById('flashcard').classList.add('shake');
-        feedbackIcon.innerHTML = '<i class="fa-solid fa-face-frown-open text-red-500 drop-shadow-lg"></i>';
-        
-        if (db[dbIndex].level > 1) {
-          db[dbIndex].level--;
-        }
-      }
-
-      const newLevel = db[dbIndex].level;
-      db[dbIndex].nextReview = Date.now() + INTERVALS[newLevel];
-
-      feedbackIcon.classList.remove('opacity-0');
-      feedbackIcon.classList.add('bounce-in');
-
-      setTimeout(() => {
-        document.getElementById('flashcard').classList.remove('shake');
-        currentQIndex++;
-        if (currentQIndex < sessionStats.total) {
-          loadQuestion();
-        } else {
-          finishLearning();
-        }
-      }, 1200);
-    }
-
-    function handleChoiceAnswer(selectedId, correctId, btnElement) {
-      if(isAnswering) return;
-      const reactionTime = (Date.now() - qStartTime) / 1000;
-      const isCorrect = (selectedId === correctId);
-
-      const allBtns = document.getElementById('answer-area').children;
-      for(let b of allBtns) {
-        b.disabled = true;
-        if(b.onclick.toString().includes(correctId)) {
-          b.className = "w-full text-left p-4 rounded-2xl border-2 border-green-400 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-bold shadow-sm transition-all";
-        }
-      }
-
-      if(!isCorrect) {
-        btnElement.className = "w-full text-left p-4 rounded-2xl border-2 border-red-400 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-bold shake shadow-sm transition-all";
-      }
-
-      processAnswer(isCorrect, false, reactionTime);
-    }
-
-    function handleTypingAnswer(userInput, correctWord, inputElement) {
-      if(isAnswering || !userInput) return;
-      const reactionTime = (Date.now() - qStartTime) / 1000;
       
-      const inputLower = userInput.toLowerCase();
-      const correctLower = correctWord.toLowerCase();
+      const isCorrect = (selected === correct);
+      const timeTaken = (Date.now() - qStartTime) / 1000;
+      sessionStats.totalTime += timeTaken;
 
-      inputElement.disabled = true;
+      const allBtns = document.getElementById('answer-area').querySelectorAll('button');
+      
+      allBtns.forEach(b => {
+         b.disabled = true;
+         if (b.innerText === correct) {
+           b.classList.remove('border-gray-100', 'dark:border-gray-700');
+           b.classList.add('border-green-500', 'bg-green-50', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400');
+         } else if (b === btnEl && !isCorrect) {
+           b.classList.remove('border-gray-100', 'dark:border-gray-700');
+           b.classList.add('border-red-500', 'bg-red-50', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400', 'shake');
+         }
+      });
 
-      if (inputLower === correctLower) {
-        inputElement.className = "w-full border-2 border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-2xl px-5 py-4 text-center text-xl font-bold transition-all mb-3";
-        processAnswer(true, false, reactionTime);
+      const icon = document.getElementById('feedback-icon');
+      icon.innerHTML = isCorrect ? '<i class="fa-solid fa-circle-check text-green-500"></i>' : '<i class="fa-solid fa-circle-xmark text-red-500"></i>';
+      icon.classList.remove('opacity-0');
+      icon.classList.add('bounce-in');
+
+      // Tính điểm
+      if (isCorrect) {
+        sessionStats.correct++;
+        if (wordObj.level < 5) {
+            wordObj.level++;
+            sessionStats.levelUps++;
+        }
+        wordObj.nextReview = Date.now() + INTERVALS[wordObj.level];
       } else {
-        const distance = levenshteinDistance(inputLower, correctLower);
-        const accuracy = 1 - (distance / Math.max(inputLower.length, correctLower.length));
+        if (wordObj.level > 1) {
+            wordObj.level--;
+        }
+        wordObj.nextReview = Date.now() + INTERVALS[1]; // Phải ôn lại ngay (Cấp 1)
+      }
 
-        if (accuracy >= 0.75) {
-          inputElement.value = correctWord;
-          inputElement.className = "w-full border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-2xl px-5 py-4 text-center text-xl font-bold transition-all mb-3";
-          processAnswer(true, true, reactionTime);
+      // Lưu db
+      const idx = db.findIndex(w => w.id === wordObj.id);
+      if (idx !== -1) db[idx] = wordObj;
+      saveData();
+
+      // Chuyển câu tiếp theo
+      setTimeout(() => {
+        icon.classList.add('opacity-0');
+        icon.classList.remove('bounce-in');
+        
+        currentQIndex++;
+        if (currentQIndex < learningQueue.length) {
+            renderQuestion();
         } else {
-          inputElement.value = correctWord;
-          inputElement.className = "w-full border-2 border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-2xl px-5 py-4 text-center text-xl font-bold transition-all mb-3 shake";
-          processAnswer(false, false, reactionTime);
+            finishLearning();
         }
-      }
-    }
-
-    function levenshteinDistance(a, b) {
-      const matrix = [];
-      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-
-      for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-          if (b.charAt(i - 1) === a.charAt(j - 1)) {
-            matrix[i][j] = matrix[i - 1][j - 1];
-          } else {
-            matrix[i][j] = Math.min(
-              matrix[i - 1][j - 1] + 1,
-              Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
-            );
-          }
-        }
-      }
-      return matrix[b.length][a.length];
+      }, 1500);
     }
 
     function finishLearning() {
       document.getElementById('view-learning').classList.add('hidden');
       document.getElementById('view-learning').classList.remove('flex');
       
-      const viewSummary = document.getElementById('view-summary');
-      viewSummary.classList.remove('hidden');
-      viewSummary.classList.add('flex');
-
-      const acc = sessionStats.total > 0 ? Math.round((sessionStats.correct / sessionStats.total) * 100) : 0;
-      const speed = sessionStats.total > 0 ? (sessionStats.totalTime / sessionStats.total).toFixed(1) : 0;
-
-      document.getElementById('sum-accuracy').innerText = `${acc}%`;
-      document.getElementById('sum-speed').innerText = `${speed}s`;
-      document.getElementById('sum-levelup').innerText = `+${sessionStats.levelUps} từ`;
-
-      saveData();
-    }
-
-    function backToDashboard() {
-      document.getElementById('view-summary').classList.add('hidden');
-      document.getElementById('view-summary').classList.remove('flex');
-      document.getElementById('view-dashboard').classList.remove('hidden');
-      initDashboard();
+      document.getElementById('view-summary').classList.remove('hidden');
+      document.getElementById('view-summary').classList.add('flex');
+      
+      const accuracy = Math.round((sessionStats.correct / sessionStats.total) * 100) || 0;
+      const avgSpeed = sessionStats.total === 0 ? 0 : (sessionStats.totalTime / sessionStats.total).toFixed(1);
+      
+      document.getElementById('sum-accuracy').innerText = `${accuracy}%`;
+      document.getElementById('sum-speed').innerText = `${avgSpeed}s`;
+      document.getElementById('sum-levelup').innerText = sessionStats.levelUps;
     }
 
     function quitLearning() {
@@ -1326,83 +1199,172 @@ Hãy trả về một chuỗi JSON hợp lệ duy nhất có cấu trúc chính 
       initDashboard();
     }
 
-    // --- HIỂN THỊ DASHBOARD & SỔ TỪ VỰNG ---
-    function initDashboard() {
-      const now = Date.now();
-      const dueWords = db.filter(w => w.nextReview <= now);
-
-      document.getElementById('due-count').innerText = dueWords.length;
-      document.getElementById('total-words').innerText = db.length;
-
-      const btnLearn = document.getElementById('btn-start-learning');
-      if (dueWords.length === 0) {
-        btnLearn.disabled = true;
-        btnLearn.innerHTML = 'ĐÃ ÔN XONG HÔM NAY <i class="fa-solid fa-check"></i>';
-      } else {
-        btnLearn.disabled = false;
-        btnLearn.innerHTML = 'BẮT ĐẦU HỌC <i class="fa-solid fa-play text-sm"></i>';
-      }
-
-      renderLevelStats();
-      renderDictionary();
+    function backToDashboard() {
+      document.getElementById('view-summary').classList.add('hidden');
+      document.getElementById('view-summary').classList.remove('flex');
+      document.getElementById('view-dashboard').classList.remove('hidden');
+      initDashboard();
     }
 
-    function renderLevelStats() {
-      const container = document.getElementById('level-stats');
-      container.innerHTML = '';
-      const counts = {1:0, 2:0, 3:0, 4:0, 5:0};
-      db.forEach(w => counts[w.level]++);
-
-      for (let i = 5; i >= 1; i--) {
-        const info = LEVEL_INFO[i];
-        const percent = db.length === 0 ? 0 : Math.round((counts[i] / db.length) * 100);
-
-        container.innerHTML += `
-          <div class="flex items-center gap-3">
-            <div class="w-8 flex justify-center ${info.color}"><i class="fa-solid ${info.icon}"></i></div>
-            <div class="flex-1">
-              <div class="flex justify-between text-xs mb-1">
-                <span class="font-bold text-gray-600 dark:text-gray-300">Cấp ${i}: ${info.name}</span>
-                <span class="text-gray-400 font-mono">${counts[i]} từ</span>
-              </div>
-              <div class="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div class="h-full ${info.bg} rounded-full" style="width: ${percent}%"></div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }
-
+    // --- CÁC HÀM TIỆN ÍCH ---
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
-      const toastMsg = document.getElementById('toast-msg');
-      const toastIcon = document.getElementById('toast-icon');
-
-      toastMsg.innerText = msg;
-      if (isError) {
-        toastIcon.innerHTML = '<i class="fa-solid fa-circle-exclamation text-red-400"></i>';
-      } else {
-        toastIcon.innerHTML = '<i class="fa-solid fa-bell text-brand"></i>';
-      }
-
+      document.getElementById('toast-msg').innerText = msg;
+      document.getElementById('toast-icon').innerHTML = isError 
+        ? '<i class="fa-solid fa-triangle-exclamation text-red-400"></i>' 
+        : '<i class="fa-solid fa-circle-check text-green-400"></i>';
+      
       toast.classList.remove('-translate-y-full', 'opacity-0');
       toast.classList.add('translate-y-0', 'opacity-100');
-
+      
       setTimeout(() => {
         toast.classList.remove('translate-y-0', 'opacity-100');
         toast.classList.add('-translate-y-full', 'opacity-0');
       }, 3000);
     }
 
-    // --- KHỞI TẠO ỨNG DỤNG ---
-    window.addEventListener('DOMContentLoaded', async () => {
-      applySavedTheme();
-      loadData();
-      await initServiceWorker(); // Tải Service Worker cho mobile
-      initNotificationSystem();
-      initDashboard();
+    function initDashboard() {
+        const now = Date.now();
+        let dueCount = 0;
+        let levelCounts = {1:0, 2:0, 3:0, 4:0, 5:0};
+
+        db.forEach(w => {
+            if (w.nextReview <= now) dueCount++;
+            levelCounts[w.level] = (levelCounts[w.level] || 0) + 1;
+        });
+
+        document.getElementById('due-count').innerText = dueCount;
+        document.getElementById('total-words').innerText = db.length;
+        
+        const btnStart = document.getElementById('btn-start-learning');
+        if (dueCount === 0) {
+            btnStart.disabled = true;
+            btnStart.innerHTML = 'ĐÃ ÔN TẬP XONG <i class="fa-solid fa-check text-sm"></i>';
+        } else {
+            btnStart.disabled = false;
+            btnStart.innerHTML = `BẮT ĐẦU HỌC (${dueCount}) <i class="fa-solid fa-play text-sm"></i>`;
+        }
+
+        const statsContainer = document.getElementById('level-stats');
+        statsContainer.innerHTML = '';
+        for (let i = 1; i <= 5; i++) {
+            const info = LEVEL_INFO[i];
+            const count = levelCounts[i];
+            const pct = db.length ? (count / db.length * 100) : 0;
+            
+            statsContainer.innerHTML += `
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full ${info.bg} bg-opacity-20 flex items-center justify-center ${info.color}">
+                    <i class="fa-solid ${info.icon} text-sm"></i>
+                </div>
+                <div class="flex-1">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="font-bold text-gray-700 dark:text-gray-300">${info.name}</span>
+                        <span class="text-gray-500 font-medium">${count} từ</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div class="h-full ${info.bg} rounded-full" style="width: ${pct}%"></div>
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+        
+        renderDictionary();
+    }
+
+    // --- TÍNH NĂNG NHẬP / XUẤT DỮ LIỆU ---
+    function toggleDataMenu(event) {
+        event.stopPropagation();
+        const menu = document.getElementById('data-menu');
+        menu.classList.toggle('hidden');
+    }
+
+    // Ẩn menu khi ấn ra ngoài
+    document.addEventListener('click', function(event) {
+        const menu = document.getElementById('data-menu');
+        if (menu && !menu.classList.contains('hidden')) {
+            menu.classList.add('hidden');
+        }
     });
+
+    function exportData() {
+        if (db.length === 0) {
+            showToast("Không có dữ liệu để xuất!", true);
+            return;
+        }
+        
+        const dataStr = JSON.stringify(db, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const date = new Date();
+        const dateString = `${date.getFullYear()}${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `MochiLife_Backup_${dateString}.json`;
+        document.body.appendChild(a);
+        a.click();
+        
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('Đã xuất dữ liệu thành công!');
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    const currentIds = new Set(db.map(w => w.id));
+                    let added = 0;
+                    let updated = 0;
+                    
+                    importedData.forEach(word => {
+                        // Kiểm tra tính hợp lệ cơ bản của dữ liệu nhập
+                        if (word.id && word.en && word.vi) {
+                            if (!currentIds.has(word.id)) {
+                                db.push(word);
+                                added++;
+                            } else {
+                                const idx = db.findIndex(w => w.id === word.id);
+                                if (idx !== -1) {
+                                    db[idx] = { ...db[idx], ...word };
+                                    updated++;
+                                }
+                            }
+                        }
+                    });
+                    
+                    saveData();
+                    initDashboard(); 
+                    showToast(`Nhập thành công! Thêm: ${added}, Cập nhật: ${updated}`);
+                } else {
+                    showToast('File dữ liệu không đúng định dạng!', true);
+                }
+            } catch (err) {
+                showToast('Lỗi khi đọc file!', true);
+            }
+        };
+        
+        reader.readAsText(file);
+        event.target.value = ''; // Reset input để có thể chọn lại file đó
+    }
+
+    // --- KHỞI CHẠY ỨNG DỤNG ---
+    window.onload = () => {
+        applySavedTheme();
+        loadData();
+        initServiceWorker();
+        initNotificationSystem();
+        initDashboard();
+    };
   </script>
 </body>
 </html>
