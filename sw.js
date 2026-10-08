@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mochi-life-v7'; // Tăng phiên bản lên v2
+const CACHE_NAME = 'mochi-life-v9'; // Tăng phiên bản mỗi lần sửa index.html để máy người dùng nhận bản mới
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
