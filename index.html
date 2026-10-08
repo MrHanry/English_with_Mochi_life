@@ -299,6 +299,40 @@
           <!-- Render từ JS -->
         </div>
       </div>
+      <!-- Khoảng trống để bảng phản hồi không che các đáp án -->
+      <div id="feedback-spacer" class="hidden shrink-0 h-[340px]"></div>
+
+      <!-- BẢNG PHẢN HỒI ĐÚNG / SAI -->
+      <div id="feedback-sheet" class="hidden fixed bottom-0 left-0 right-0 mx-auto w-full max-w-[480px] z-50">
+        <div id="feedback-sheet-inner" class="translate-y-full transition-transform duration-300 ease-out rounded-t-3xl border-t-4 shadow-[0_-8px_30px_rgba(0,0,0,0.15)] px-5 pt-4 pb-5">
+          <div class="flex items-center gap-2 mb-2">
+            <div id="fs-icon" class="text-2xl"></div>
+            <h3 id="fs-title" class="text-lg font-extrabold flex-1"></h3>
+            <span id="fs-level" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/70 dark:bg-gray-900/40"></span>
+            <button id="fs-heart" onclick="toggleFavoriteInSheet()" class="w-10 h-10 rounded-full bg-white/80 dark:bg-gray-900/50 flex items-center justify-center text-lg shadow-sm active:scale-90 transition-transform" aria-label="Thêm vào yêu thích">
+              <i class="fa-regular fa-heart text-red-400"></i>
+            </button>
+          </div>
+
+          <div class="bg-white/80 dark:bg-gray-900/50 rounded-2xl p-3.5 mb-3 max-h-[210px] overflow-y-auto">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span id="fs-en" class="text-xl font-extrabold text-gray-800 dark:text-white"></span>
+              <span id="fs-ipa" class="text-xs font-mono text-amber-600 dark:text-amber-400"></span>
+              <button onclick="playAudio(currentFeedbackWord && currentFeedbackWord.en)" class="w-8 h-8 rounded-full bg-amber-100 text-brand dark:bg-amber-900/60 dark:text-amber-300 flex items-center justify-center text-sm" aria-label="Nghe phát âm">
+                <i class="fa-solid fa-volume-high"></i>
+              </button>
+            </div>
+            <p id="fs-typed" class="hidden text-xs text-gray-500 dark:text-gray-400 mt-1"></p>
+            <p id="fs-vi" class="font-bold text-gray-700 dark:text-gray-200 mt-1"></p>
+            <div id="fs-example" class="hidden mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+              <p id="fs-example-en" class="text-sm italic font-semibold text-gray-800 dark:text-gray-100 leading-relaxed"></p>
+              <p id="fs-example-vi" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"></p>
+            </div>
+          </div>
+
+          <button id="fs-continue" onclick="continueAfterFeedback()" class="w-full text-white font-extrabold py-3.5 rounded-2xl shadow-md active:scale-95 transition-transform text-sm tracking-wide">TIẾP TỤC</button>
+        </div>
+      </div>
     </div>
 
     <!-- VIEW 3: LUYỆN TẬP VỚI AI -->
@@ -630,6 +664,49 @@
       4: 7 * 24 * 60 * 60 * 1000, 
       5: 30 * 24 * 60 * 60 * 1000 
     };
+
+    /* ===== THAM SỐ CHỈNH NHANH ===== */
+    const FAST_SECONDS = 7;        // trả lời đúng dưới số giây này thì được lên cấp (như cũ)
+    const SLOW_FACTOR = 0.75;      // đúng nhưng chậm: giữ cấp, ôn lại sớm hơn (75% khoảng cách)
+    const TYPO_THRESHOLD = 0.8;    // độ giống >= 80% thì tính là "gần đúng"
+    const TYPO_SCORE = 0.8;        // gần đúng được tính 80% điểm: giữ nguyên cấp, ôn lại sớm hơn
+    const FAVORITE_WEIGHT = 3;     // từ yêu thích có tỉ lệ được chọn cao gấp 3 lần trong bài tập AI
+
+    // Khoảng cách Damerau-Levenshtein (OSA): thêm/xóa/sửa/đảo 2 ký tự kề nhau đều tính 1 lỗi
+    // Ví dụ: "recieve" -> "receive" chỉ là 1 lỗi (đảo chữ), không phải 2
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      if (!m) return n; if (!n) return m;
+      const d = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) d[i][0] = i;
+      for (let j = 0; j <= n; j++) d[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+          if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+            d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+          }
+        }
+      }
+      return d[m][n];
+    }
+
+    // Độ giống 0..1 (happy vs hapy = 0.8)
+    function similarity(a, b) {
+      a = a.trim().toLowerCase(); b = b.trim().toLowerCase();
+      const maxLen = Math.max(a.length, b.length);
+      return maxLen ? 1 - levenshtein(a, b) / maxLen : 1;
+    }
+
+    // Chọn n từ ngẫu nhiên không trùng, từ yêu thích có trọng số cao hơn
+    function pickExerciseWords(n = 10) {
+      return db
+        .map(w => ({ w, key: Math.pow(Math.random(), 1 / (w.favorite ? FAVORITE_WEIGHT : 1)) }))
+        .sort((x, y) => y.key - x.key)
+        .slice(0, n)
+        .map(x => x.w);
+    }
 
     const LEVEL_INFO = {
       1: { name: 'Mới học', color: 'text-red-500', bg: 'bg-red-500', icon: 'fa-seedling' },
@@ -1129,6 +1206,7 @@
       learningQueue = due.slice(0, 15); 
       if(learningQueue.length === 0) return;
 
+      hideFeedbackSheet();
       currentQIndex = 0; 
       sessionStats = { total: learningQueue.length, correct: 0, typo: 0, levelUps: 0, totalTime: 0 }; 
       
@@ -1157,6 +1235,7 @@
 
     function executeQuitLearning() {
       cancelQuitLearning();
+      hideFeedbackSheet();
       document.getElementById('view-learning').classList.add('hidden'); 
       document.getElementById('view-learning').classList.remove('flex'); 
       document.getElementById('view-dashboard').classList.remove('hidden'); 
@@ -1268,13 +1347,19 @@
         isAnswering = true; 
         inp.disabled = true; 
         const t = (Date.now() - qStartTime) / 1000; 
-        if (inp.value.trim().toLowerCase() === cw.trim().toLowerCase()) {
+        const typed = inp.value.trim();
+        if (typed.toLowerCase() === cw.trim().toLowerCase()) {
           inp.className = "w-full border-2 border-green-500 bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-2xl px-5 py-3.5 text-center text-lg font-bold mb-3 transition-colors shadow-sm"; 
-          processAnswer(true, false, t);
+          processAnswer(true, false, t, typed);
+        } else if (similarity(typed, cw) >= TYPO_THRESHOLD) {
+          // Gõ gần đúng (ví dụ happy -> hapy): tính 80%, không bị coi là sai hẳn
+          inp.value = cw; 
+          inp.className = "w-full border-2 border-amber-500 bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-2xl px-5 py-3.5 text-center text-lg font-bold mb-3 transition-colors shadow-sm"; 
+          processAnswer(false, true, t, typed);
         } else {
           inp.value = cw; 
           inp.className = "w-full border-2 border-red-500 bg-red-50 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-2xl px-5 py-3.5 text-center text-lg font-bold mb-3 shake transition-colors shadow-sm"; 
-          processAnswer(false, false, t);
+          processAnswer(false, false, t, typed);
         }
       }; 
       inp.onkeypress = (e) => { if (e.key === 'Enter') btn.onclick(); }; 
@@ -1283,40 +1368,161 @@
       setTimeout(() => inp.focus(), 100);
     }
 
-    function processAnswer(isC, isT, time) { 
+    function processAnswer(isC, isT, time, typed) { 
       sessionStats.totalTime += time; 
       const w = learningQueue[currentQIndex]; 
       const idx = db.findIndex(x => x.id === w.id); 
       const fb = document.getElementById('feedback-icon'); 
       
-      if (isC) {
+      let leveledUp = false, leveledDown = false;
+      let intervalFactor = 1; // hệ số nhân khoảng cách ôn lại (chỉ rút ngắn, không kéo dài)
+      if (isT) {
+        // Gần đúng: tính 80%, giữ nguyên cấp, ôn lại sớm hơn một chút
+        sessionStats.typo++;
+        sessionStats.correct += TYPO_SCORE;
+        fb.innerHTML = '<i class="fa-solid fa-face-meh text-amber-500"></i>'; 
+        playAudio(w.en); 
+        intervalFactor = TYPO_SCORE;
+      } else if (isC) {
         sessionStats.correct++; 
         fb.innerHTML = '<i class="fa-solid fa-face-smile-beam text-green-500"></i>'; 
         playAudio(w.en); 
-        if (time < 7 && db[idx].level < 5) {
+        if (time < FAST_SECONDS && db[idx].level < 5) {
           db[idx].level++; 
           sessionStats.levelUps++;
+          leveledUp = true;
         }
+        // Đúng nhưng chậm: trí nhớ còn yếu -> ôn lại sớm hơn (ôn khi sắp quên)
+        if (time >= FAST_SECONDS) intervalFactor = SLOW_FACTOR;
       } else {
         document.getElementById('flashcard').classList.add('shake'); 
         fb.innerHTML = '<i class="fa-solid fa-face-frown-open text-red-500"></i>'; 
         if (db[idx].level > 1) {
           db[idx].level--;
+          leveledDown = true;
         }
       } 
       
-      db[idx].nextReview = Date.now() + INTERVALS[db[idx].level]; 
+      db[idx].nextReview = Date.now() + INTERVALS[db[idx].level] * intervalFactor; 
       saveData();
       
       fb.classList.remove('opacity-0'); 
       fb.classList.add('bounce-in'); 
-      setTimeout(() => {
-        document.getElementById('flashcard').classList.remove('shake'); 
-        currentQIndex++; 
-        if (currentQIndex < sessionStats.total) loadQuestion(); 
-        else finishLearning();
-      }, 1200); 
+
+      // Hiện bảng phản hồi, chờ người dùng bấm TIẾP TỤC (không tự chuyển câu nữa)
+      showFeedbackSheet(w, isC, leveledUp, leveledDown, isT, typed);
     }
+
+    /* ===== BẢNG PHẢN HỒI ĐÚNG / SAI ===== */
+    let currentFeedbackWord = null;
+    let feedbackOpenedAt = 0;
+
+    function updateSheetHeart() {
+      const w = currentFeedbackWord && db.find(x => x.id === currentFeedbackWord.id);
+      const btn = document.getElementById('fs-heart');
+      if (!btn) return;
+      btn.innerHTML = (w && w.favorite)
+        ? '<i class="fa-solid fa-heart text-red-500"></i>'
+        : '<i class="fa-regular fa-heart text-red-400"></i>';
+    }
+
+    function toggleFavoriteInSheet() {
+      if (!currentFeedbackWord) return;
+      const w = db.find(x => x.id === currentFeedbackWord.id);
+      toggleFavorite(currentFeedbackWord.id);
+      updateSheetHeart();
+      if (w) showToast(w.favorite ? 'Đã thêm vào Yêu thích ❤' : 'Đã bỏ khỏi Yêu thích');
+    }
+
+    function showFeedbackSheet(word, isCorrect, leveledUp, leveledDown, isTypo, typed) {
+      const w = db.find(x => x.id === word.id) || word;
+      currentFeedbackWord = w;
+
+      const sheet = document.getElementById('feedback-sheet');
+      const inner = document.getElementById('feedback-sheet-inner');
+      const btn = document.getElementById('fs-continue');
+      const title = document.getElementById('fs-title');
+
+      if (isTypo) {
+        inner.className = "transition-transform duration-300 ease-out rounded-t-3xl border-t-4 shadow-[0_-8px_30px_rgba(0,0,0,0.15)] px-5 pt-4 pb-5 translate-y-full bg-amber-100 border-amber-500 dark:bg-amber-950 dark:border-amber-600";
+        title.className = "text-lg font-extrabold flex-1 text-amber-700 dark:text-amber-300";
+        title.innerText = "Gần đúng! (80%)";
+        document.getElementById('fs-icon').innerHTML = '<i class="fa-solid fa-circle-exclamation text-amber-500"></i>';
+        btn.className = "w-full text-white font-extrabold py-3.5 rounded-2xl shadow-md active:scale-95 transition-transform text-sm tracking-wide bg-amber-500 hover:bg-amber-600";
+      } else if (isCorrect) {
+        inner.className = "transition-transform duration-300 ease-out rounded-t-3xl border-t-4 shadow-[0_-8px_30px_rgba(0,0,0,0.15)] px-5 pt-4 pb-5 translate-y-full bg-green-100 border-green-500 dark:bg-green-950 dark:border-green-600";
+        title.className = "text-lg font-extrabold flex-1 text-green-700 dark:text-green-300";
+        title.innerText = "Chính xác!";
+        document.getElementById('fs-icon').innerHTML = '<i class="fa-solid fa-circle-check text-green-500"></i>';
+        btn.className = "w-full text-white font-extrabold py-3.5 rounded-2xl shadow-md active:scale-95 transition-transform text-sm tracking-wide bg-green-500 hover:bg-green-600";
+      } else {
+        inner.className = "transition-transform duration-300 ease-out rounded-t-3xl border-t-4 shadow-[0_-8px_30px_rgba(0,0,0,0.15)] px-5 pt-4 pb-5 translate-y-full bg-red-100 border-red-500 dark:bg-red-950 dark:border-red-600";
+        title.className = "text-lg font-extrabold flex-1 text-red-700 dark:text-red-300";
+        title.innerText = "Chưa đúng, đáp án là:";
+        document.getElementById('fs-icon').innerHTML = '<i class="fa-solid fa-circle-xmark text-red-500"></i>';
+        btn.className = "w-full text-white font-extrabold py-3.5 rounded-2xl shadow-md active:scale-95 transition-transform text-sm tracking-wide bg-red-500 hover:bg-red-600";
+      }
+
+      // Badge thay đổi cấp độ
+      const lv = document.getElementById('fs-level');
+      if (leveledUp) { lv.innerText = `⬆ Lên cấp ${w.level}`; lv.className = "text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/70 dark:bg-gray-900/40 text-green-700 dark:text-green-300"; }
+      else if (leveledDown) { lv.innerText = `⬇ Xuống cấp ${w.level}`; lv.className = "text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/70 dark:bg-gray-900/40 text-red-700 dark:text-red-300"; }
+      else if (isTypo) { lv.innerText = `= Giữ cấp ${w.level}`; lv.className = "text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/70 dark:bg-gray-900/40 text-amber-700 dark:text-amber-300"; }
+      else { lv.className = "hidden"; }
+
+      const typedEl = document.getElementById('fs-typed');
+      if (typed && typed.toLowerCase() !== w.en.toLowerCase()) {
+        typedEl.innerHTML = `Bạn gõ: <span class="font-bold line-through decoration-2">${typed.replace(/</g, '&lt;')}</span>`;
+        typedEl.classList.remove('hidden');
+      } else {
+        typedEl.classList.add('hidden');
+      }
+
+      document.getElementById('fs-en').innerText = w.en;
+      document.getElementById('fs-ipa').innerText = w.ipa || '';
+      document.getElementById('fs-vi').innerText = w.vi;
+
+      const exBox = document.getElementById('fs-example');
+      if (w.exampleEn) {
+        const escapedEn = escapeRegExp(w.en);
+        document.getElementById('fs-example-en').innerHTML = `"${w.exampleEn.replace(new RegExp(`\\b${escapedEn}\\b`, 'gi'), m => `<span class="text-brand font-bold underline underline-offset-2">${m}</span>`)}"`;
+        document.getElementById('fs-example-vi').innerText = w.exampleVi || '';
+        exBox.classList.remove('hidden');
+      } else {
+        exBox.classList.add('hidden');
+      }
+
+      updateSheetHeart();
+
+      document.getElementById('feedback-spacer').classList.remove('hidden');
+      sheet.classList.remove('hidden');
+      feedbackOpenedAt = Date.now();
+      // Trượt từ dưới lên
+      requestAnimationFrame(() => requestAnimationFrame(() => inner.classList.remove('translate-y-full')));
+    }
+
+    function hideFeedbackSheet() {
+      document.getElementById('feedback-sheet').classList.add('hidden');
+      document.getElementById('feedback-spacer').classList.add('hidden');
+      currentFeedbackWord = null;
+    }
+
+    function continueAfterFeedback() {
+      if (!currentFeedbackWord) return;
+      hideFeedbackSheet();
+      document.getElementById('flashcard').classList.remove('shake'); 
+      currentQIndex++; 
+      if (currentQIndex < sessionStats.total) loadQuestion(); 
+      else finishLearning();
+    }
+
+    // Nhấn Enter để TIẾP TỤC (trên máy tính)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && currentFeedbackWord && Date.now() - feedbackOpenedAt > 350) {
+        e.preventDefault();
+        continueAfterFeedback();
+      }
+    });
 
     function finishLearning() { 
       document.getElementById('view-learning').classList.add('hidden'); 
@@ -1474,8 +1680,7 @@
         return;
       }
 
-      let pool = [...db].sort(() => Math.random() - 0.5);
-      dailyExerciseWords = pool.slice(0, 10);
+      dailyExerciseWords = pickExerciseWords(10);
 
       await triggerAIGeneration(apiKey);
     }
@@ -1493,8 +1698,7 @@
       const btnRefresh = document.getElementById('btn-refresh-exercise');
       btnRefresh.querySelector('i').classList.add('fa-spin');
       
-      let pool = [...db].sort(() => Math.random() - 0.5);
-      dailyExerciseWords = pool.slice(0, 10);
+      dailyExerciseWords = pickExerciseWords(10);
 
       await triggerAIGeneration(apiKey);
       
