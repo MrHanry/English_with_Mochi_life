@@ -508,7 +508,7 @@
           </button>
 
           <div class="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 text-center hover:border-brand transition-colors">
-            <input type="file" id="import-file-input" accept=".json" onchange="importJSON(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+            <input type="file" id="import-file-input" accept=".json,application/json,text/plain" onchange="importJSON(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
             <div class="text-gray-500 dark:text-gray-400">
               <i class="fa-solid fa-upload text-2xl text-brand mb-1"></i>
               <p class="text-xs font-bold">Bấm vào đây để chọn tệp JSON</p>
@@ -787,11 +787,43 @@
       setTimeout(() => modal.classList.add('hidden'), 300);
     }
 
-    function exportJSON() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+    // iPhone/iPad: trình duyệt bỏ qua thuộc tính download -> dùng bảng chia sẻ để "Lưu vào Tệp"
+    function isIOS() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    async function exportJSON() {
+      const fileName = `MochiLife_Backup_${new Date().toISOString().slice(0,10)}.json`;
+      const json = JSON.stringify(db, null, 2);
+
+      if (isIOS()) {
+        try {
+          const file = new File([json], fileName, { type: 'application/json' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Sao lưu Mochi Life' });
+            showToast('Đã gửi file sao lưu. Nếu bạn chọn "Lưu vào Tệp" thì file nằm trong ứng dụng Tệp.');
+            closeJsonModal();
+            return;
+          }
+        } catch (err) {
+          if (err && err.name === 'AbortError') { showToast('Bạn đã đóng bảng chia sẻ, file chưa được lưu.', true); return; }
+          // lỗi khác: thử cách dự phòng bên dưới
+        }
+        // Dự phòng cho iOS cũ: sao chép nội dung sao lưu để dán vào Ghi chú
+        try {
+          await navigator.clipboard.writeText(json);
+          showToast('Máy chưa hỗ trợ lưu file. Đã sao chép nội dung sao lưu, hãy dán vào Ghi chú để giữ lại.', true);
+        } catch (err) {
+          showToast('Không thể xuất file trên thiết bị này. Hãy thử mở app bằng Safari.', true);
+        }
+        return;
+      }
+
+      // Android / máy tính: giữ nguyên cách tải trực tiếp như cũ
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(json);
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `MochiLife_Backup_${new Date().toISOString().slice(0,10)}.json`);
+      downloadAnchor.setAttribute("download", fileName);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -806,7 +838,7 @@
       const reader = new FileReader();
       reader.onload = function(e) {
         try {
-          const importedData = JSON.parse(e.target.result);
+          const importedData = JSON.parse(String(e.target.result).replace(/^\uFEFF/, ''));
           if (Array.isArray(importedData)) {
             db = importedData;
             saveData();
