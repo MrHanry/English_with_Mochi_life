@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mochi-life-v10'; // Tăng phiên bản mỗi lần sửa index.html để máy người dùng nhận bản mới
+const CACHE_NAME = 'mochi-life-v11'; // Tăng phiên bản mỗi lần sửa index.html để máy người dùng nhận bản mới
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -21,8 +21,8 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key); // Tự động xóa sạch các bản cache cũ
+          if (key.startsWith('mochi-life-') && key !== CACHE_NAME) { // chỉ dọn cache CỦA APP NÀY, không đụng cache của app khác cùng tên miền
+            return caches.delete(key); // xóa bản cache cũ của chính app này
           }
         })
       );
